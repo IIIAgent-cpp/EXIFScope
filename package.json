@@ -1,0 +1,20 @@
+{
+  "name": "exifsp",
+  "version": "1.0.0",
+  "description": "Extract and analyze EXIF metadata from images in the DOM",
+  "type": "module",
+  "main": "./EXIFSP.js",
+  "exports": {
+    ".": "./EXIFSP.js"
+  },
+  "keywords": [
+    "exif",
+    "metadata",
+    "image",
+    "camera",
+    "gps",
+    "photo"
+  ],
+  "author": "IIIAgent-cpp",
+  "license": "MIT"
+}
