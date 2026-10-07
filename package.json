@@ -7,6 +7,11 @@
   "exports": {
     ".": "./EXIFSP.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/IIIAgent-cpp/EXIFScope.git"
+  },
+  "homepage": "https://github.com/IIIAgent-cpp/EXIFScope",
   "keywords": [
     "exif",
     "metadata",
