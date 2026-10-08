@@ -46,22 +46,40 @@ export interface ImageSource {
   img: HTMLImageElement | null;
 }
 
-const TYPE_SIZES = {
+interface IfdEntry {
+  type: number;
+  count: number;
+  offset: number;
+}
+
+type IfdTags = Record<number, IfdEntry>;
+
+interface FetchExifResult {
+  exif: RawExifData | null;
+  error: string | null;
+}
+
+interface ReadBytesResult {
+  buf: ArrayBuffer;
+  truncated: boolean;
+}
+
+const TYPE_SIZES: Record<number, number> = {
   1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1,
   7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8
 };
 
-const asString = (v) =>
+const asString = (v: unknown): string | null =>
   typeof v === "string" && v.length > 0 ? v : null;
 
-const asNumber = (v) =>
+const asNumber = (v: unknown): number | null =>
   typeof v === "number" && Number.isFinite(v) ? v : null;
 
-export function parseImageExif(arrayBuffer) {
+export function parseImageExif(arrayBuffer: ArrayBuffer): RawExifData | null {
   if (!arrayBuffer || arrayBuffer.byteLength < 12) return null;
 
   const view = new DataView(arrayBuffer);
-  let exifOffset = null;
+  let exifOffset: number | null = null;
   let isLittleEndian = false;
 
   const magic16 = view.getUint16(0, false);
@@ -101,8 +119,7 @@ export function parseImageExif(arrayBuffer) {
       }
       offset += 2 + length;
     }
-  }
-  else if (magic32 === 0x89504e47) {
+  } else if (magic32 === 0x89504e47) {
     if (view.byteLength < 8 || view.getUint32(4, false) !== 0x0d0a1a0a) return null;
     let offset = 8;
     while (offset + 8 <= view.byteLength) {
@@ -116,8 +133,7 @@ export function parseImageExif(arrayBuffer) {
       }
       offset += 12 + chunkLength;
     }
-  }
-  else if (magic32 === 0x52494646) {
+  } else if (magic32 === 0x52494646) {
     if (view.byteLength < 12 || view.getUint32(8, false) !== 0x57454250) return null;
     let offset = 12;
     while (offset + 8 <= view.byteLength) {
@@ -162,17 +178,17 @@ export function parseImageExif(arrayBuffer) {
 
   const base = exifOffset;
 
-  const safeGetUint16 = (ptr) =>
+  const safeGetUint16 = (ptr: number): number | null =>
     Number.isInteger(ptr) && ptr >= 0 && ptr + 2 <= view.byteLength
       ? view.getUint16(ptr, isLittleEndian)
       : null;
 
-  const safeGetUint32 = (ptr) =>
+  const safeGetUint32 = (ptr: number): number | null =>
     Number.isInteger(ptr) && ptr >= 0 && ptr + 4 <= view.byteLength
       ? view.getUint32(ptr, isLittleEndian)
       : null;
 
-  function decodeOne(p, type) {
+  function decodeOne(p: number, type: number): number | null {
     switch (type) {
       case 1: return view.getUint8(p);
       case 6: return view.getInt8(p);
@@ -196,10 +212,18 @@ export function parseImageExif(arrayBuffer) {
     }
   }
 
-  function readValue(offset, type, count) {
-    if (!Number.isInteger(offset) || offset < 0 || !Number.isInteger(count) || count < 0) return null;
+  function readValue(
+    offset: number,
+    type: number,
+    count: number
+  ): string | number | number[] | Uint8Array | null {
+    if (!Number.isInteger(offset) || offset < 0 || !Number.isInteger(count) || count < 0) {
+      return null;
+    }
+
     const unit = TYPE_SIZES[type];
     if (!unit) return null;
+
     const totalBytes = unit * count;
     if (!Number.isSafeInteger(totalBytes) || offset + totalBytes > view.byteLength) return null;
 
@@ -219,15 +243,17 @@ export function parseImageExif(arrayBuffer) {
 
     if (count === 1) return decodeOne(offset, type);
 
-    const values = new Array(count);
+    const values: number[] = [];
     for (let i = 0; i < count; i++) {
-      values[i] = decodeOne(offset + i * unit, type);
+      const value = decodeOne(offset + i * unit, type);
+      if (value === null) return null;
+      values.push(value);
     }
     return values;
   }
 
-  function parseIFD(ifdOffset) {
-    const tags = {};
+  function parseIFD(ifdOffset: number): IfdTags {
+    const tags: IfdTags = {};
     if (!Number.isInteger(ifdOffset) || ifdOffset < 0) return tags;
 
     const absoluteOffset = base + ifdOffset;
@@ -250,7 +276,7 @@ export function parseImageExif(arrayBuffer) {
       const totalBytes = unit * count;
       if (!Number.isSafeInteger(totalBytes)) continue;
 
-      let valueOffset;
+      let valueOffset: number;
       if (totalBytes > 4) {
         const ptr = safeGetUint32(entryOffset + 8);
         if (ptr === null) continue;
@@ -266,14 +292,16 @@ export function parseImageExif(arrayBuffer) {
     return tags;
   }
 
-  const readEntry = (entry) => {
+  const readEntry = (
+    entry: IfdEntry | undefined
+  ): string | number | number[] | Uint8Array | null => {
     if (!entry) return null;
     const value = readValue(entry.offset, entry.type, entry.count);
     if (Array.isArray(value)) return value.length ? value[0] : null;
     return value;
   };
 
-  const metadata = {};
+  const metadata: RawExifData = {};
   const ifd0 = parseIFD(firstIFDOffset);
 
   metadata.make = asString(readEntry(ifd0[0x010f]));
@@ -294,7 +322,7 @@ export function parseImageExif(arrayBuffer) {
   if (gpsPtr !== null) {
     const gpsIFD = parseIFD(gpsPtr);
 
-    const parseGPSCoord = (tag) => {
+    const parseGPSCoord = (tag: number): number | null => {
       const entry = gpsIFD[tag];
       if (!entry || entry.type !== 5 || entry.count < 3) return null;
       const values = readValue(entry.offset, entry.type, entry.count);
@@ -325,11 +353,11 @@ export function parseImageExif(arrayBuffer) {
 
 const DEFAULT_RANGE_BYTES = 131072;
 
-const SKIP_STYLE_TAGS = new Set([
+const SKIP_STYLE_TAGS = new Set<string>([
   "SCRIPT", "STYLE", "META", "LINK", "TITLE", "HEAD", "NOSCRIPT", "BR"
 ]);
 
-const fmtExposure = (t) => {
+const fmtExposure = (t: number | null | undefined): string => {
   if (t == null || !Number.isFinite(t)) return "N/A";
   if (t <= 0) return `${t}s`;
   if (t >= 1) return `${Number(t.toFixed(1))}s`;
@@ -337,8 +365,8 @@ const fmtExposure = (t) => {
   return `1/${Math.round(1 / t)}s`;
 };
 
-function parseSrcset(value) {
-  const urls = [];
+function parseSrcset(value: string): string[] {
+  const urls: string[] = [];
   const n = value.length;
   let i = 0;
 
@@ -363,12 +391,12 @@ function parseSrcset(value) {
 }
 
 function collectElements(
-  root,
-  inShadow,
-  hostTag,
-  out,
-  visited
-) {
+  root: Document | Element | ShadowRoot,
+  inShadow: boolean,
+  hostTag: string,
+  out: Array<{ el: Element; where: string }>,
+  visited: Set<Element>
+): Array<{ el: Element; where: string }> {
   if (typeof root.querySelectorAll !== "function") return out;
 
   const elements = root.querySelectorAll("*");
@@ -387,15 +415,15 @@ function collectElements(
 }
 
 async function readBytes(
-  res,
-  limit
-) {
+  res: Response,
+  limit: number
+): Promise<ReadBytesResult> {
   if (!res.body) {
     return { buf: await res.arrayBuffer(), truncated: false };
   }
 
   const reader = res.body.getReader();
-  const chunks = [];
+  const chunks: Uint8Array[] = [];
   let total = 0;
   let finished = false;
 
@@ -429,9 +457,9 @@ async function readBytes(
 }
 
 async function fetchExif(
-  url,
-  rangeBytes
-) {
+  url: string,
+  rangeBytes: number
+): Promise<FetchExifResult> {
   try {
     const res = await fetch(url, {
       headers: { Range: `bytes=0-${rangeBytes - 1}` }
@@ -454,7 +482,7 @@ async function fetchExif(
     }
     const buf = await res.arrayBuffer();
     return { exif: parseImageExif(buf), error: null };
-  } catch (err) {
+  } catch (err: unknown) {
     if (err instanceof TypeError) {
       return { exif: null, error: "CORS Blocked / Network Error" };
     }
@@ -465,7 +493,9 @@ async function fetchExif(
   }
 }
 
-export async function analyzeExif(options = {}) {
+export async function analyzeExif(
+  options: AnalyzeOptions = {}
+): Promise<ImageResult[]> {
   if (typeof window === "undefined" || typeof document === "undefined") {
     console.warn("analyzeExif() must be run in a browser environment.");
     return [];
@@ -475,31 +505,47 @@ export async function analyzeExif(options = {}) {
   const rootElement = options.rootElement ?? document;
   const logToConsole = options.logToConsole ?? false;
 
-  const CSS_PROPS = [
+  const CSS_PROPS: Array<
+    ["backgroundImage" | "listStyleImage" | "borderImageSource", string]
+  > = [
     ["backgroundImage", "background-image"],
     ["listStyleImage", "list-style-image"],
     ["borderImageSource", "border-image-source"]
   ];
 
-  const PSEUDOS = [null, "::before", "::after"];
+  const PSEUDOS: Array<null | "::before" | "::after"> = [null, "::before", "::after"];
   const urlRe = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
 
-  const elements = [];
-  const visited = new Set();
+  const elements: Array<{ el: Element; where: string }> = [];
+  const visited = new Set<Element>();
+
   if (rootElement instanceof Element) {
     visited.add(rootElement);
     elements.push({ el: rootElement, where: "document" });
     if (rootElement.shadowRoot) {
-      collectElements(rootElement.shadowRoot, true, rootElement.tagName.toLowerCase(), elements, visited);
+      collectElements(
+        rootElement.shadowRoot,
+        true,
+        rootElement.tagName.toLowerCase(),
+        elements,
+        visited
+      );
     }
   }
-  collectElements(rootElement, false, "", elements, visited);
-  const sources = [];
-  const seen = new Set();
 
-  function addSource(type, where, src, img = null) {
+  collectElements(rootElement, false, "", elements, visited);
+
+  const sources: ImageSource[] = [];
+  const seen = new Set<string>();
+
+  function addSource(
+    type: string,
+    where: string,
+    src: string,
+    img: HTMLImageElement | null = null
+  ): void {
     if (!src) return;
-    let absolute;
+    let absolute: string;
     try {
       absolute = new URL(src, window.location.href).href;
     } catch {
@@ -543,7 +589,7 @@ export async function analyzeExif(options = {}) {
     if (SKIP_STYLE_TAGS.has(el.tagName)) continue;
 
     for (const pseudo of PSEUDOS) {
-      let cs;
+      let cs: CSSStyleDeclaration;
       try {
         cs = window.getComputedStyle(el, pseudo);
       } catch {
@@ -564,8 +610,8 @@ export async function analyzeExif(options = {}) {
     }
   }
 
-  const results = [];
-  const cache = new Map();
+  const results: ImageResult[] = [];
+  const cache = new Map<string, FetchExifResult>();
 
   for (let idx = 0; idx < sources.length; idx++) {
     const s = sources[idx];
