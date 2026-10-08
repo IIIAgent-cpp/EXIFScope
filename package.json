@@ -25,7 +25,7 @@
     "photo"
   ],
   "author": "IIIAgent-cpp",
-  "license": "MIT",
+  "license": "BSD-3-Clause",
   "devDependencies": {
     "typescript": "^5.0.0"
   }
