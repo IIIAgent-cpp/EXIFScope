@@ -4,8 +4,12 @@
   "description": "Extract and analyze EXIF metadata from images in the DOM",
   "type": "module",
   "main": "./dist/EXIFSP.js",
-  "exports": {
-    ".": "./dist/EXIFSP.js"
+"exports": {
+  ".": {
+    "types": "./dist/EXIFSP.d.ts",
+    "import": "./dist/EXIFSP.js"
+  }
+}
   },
   "types": "./dist/EXIFSP.d.ts",
   "scripts": {
