@@ -3,9 +3,13 @@
   "version": "1.0.0",
   "description": "Extract and analyze EXIF metadata from images in the DOM",
   "type": "module",
-  "main": "./EXIFSP.js",
+  "main": "./dist/EXIFSP.js",
   "exports": {
-    ".": "./EXIFSP.js"
+    ".": "./dist/EXIFSP.js"
+  },
+  "types": "./dist/EXIFSP.d.ts",
+  "scripts": {
+    "build": "tsc"
   },
   "repository": {
     "type": "git",
@@ -21,5 +25,8 @@
     "photo"
   ],
   "author": "IIIAgent-cpp",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
 }
